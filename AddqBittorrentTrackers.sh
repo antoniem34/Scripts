@@ -2,9 +2,9 @@
 
 ########## CONFIGURATIONS ##########
 # Host on which qBittorrent runs
-qbt_host="http://10.0.0.100"
+qbt_host="http://192.168.100.100"
 # Port -> the same port that is inside qBittorrent option -> Web UI -> Web User Interface
-qbt_port="8081"
+qbt_port="8080"
 # Username to access to Web UI
 qbt_username="admin"
 # Password to access to Web UI
