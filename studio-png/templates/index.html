@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Quitar Fondo IA</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Flujo local para producción fotográfica</p>
+          <h1>Quitar fondo, normalizar retratos y preparar graduación sin depender de suscripciones.</h1>
+          <p class="lead">
+            Elige origen y destino, procesa por lote y deja la salida lista para tus plantillas de Photoshop.
+          </p>
+        </div>
+        <div class="hero-note">
+          <span class="chip">GPU local</span>
+          <span class="chip">PNG transparente</span>
+          <span class="chip">Canvas 3600 × 4500</span>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <section class="controls">
+          <div class="section-head">
+            <p class="section-kicker">Entrada</p>
+            <h2>Configura el lote</h2>
+          </div>
+
+          <label class="field">
+            <span>Carpeta origen</span>
+            <div class="path-row">
+              <input id="inputDir" type="text" value="" placeholder="Ejemplo: D:\Trabajo\Fotos" />
+              <button type="button" class="ghost" data-pick="input">Pegar ruta</button>
+            </div>
+          </label>
+
+          <label class="field">
+            <span>Carpeta destino</span>
+            <div class="path-row">
+              <input id="outputDir" type="text" value="" placeholder="Ejemplo: D:\Trabajo\_sin_fondo_final" />
+              <button type="button" class="ghost" id="openOutput">Abrir</button>
+            </div>
+          </label>
+
+          <div class="grid two">
+            <label class="field">
+              <span>Modelo</span>
+              <select id="model">
+                {% for model in settings.models %}
+                  <option value="{{ model }}">{{ model }}</option>
+                {% endfor %}
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Límite de prueba</span>
+              <input id="limit" type="number" min="1" step="1" placeholder="Vacío = todo el lote" />
+            </label>
+          </div>
+
+          <div class="toggle-group">
+            <label><input id="alphaMatting" type="checkbox" checked /> Refinar bordes</label>
+            <label><input id="autocrop" type="checkbox" checked /> Limpiar aire sobrante</label>
+            <label><input id="overwrite" type="checkbox" /> Sobrescribir existentes</label>
+          </div>
+
+          <div class="section-head top-gap">
+            <p class="section-kicker">Salida</p>
+            <h2>Elige el formato final</h2>
+          </div>
+
+          <div class="mode-tabs">
+            <button type="button" class="mode-tab active" data-mode="transparent">PNG Transparente</button>
+            <button type="button" class="mode-tab" data-mode="canvas">Preparar Graduación</button>
+          </div>
+
+          <div id="canvasPanel" class="canvas-panel hidden">
+            <div class="grid three">
+              <label class="field">
+                <span>Preset</span>
+                <select id="presetSelect">
+                  <option value="normal">{{ settings.presets.normal.label }}</option>
+                  <option value="cuadro">{{ settings.presets.cuadro.label }}</option>
+                  <option value="custom">Personalizado</option>
+                </select>
+              </label>
+
+              <label class="field">
+                <span>Ancho lienzo</span>
+                <input id="canvasWidth" type="number" min="1" step="1" />
+              </label>
+
+              <label class="field">
+                <span>Alto lienzo</span>
+                <input id="canvasHeight" type="number" min="1" step="1" />
+              </label>
+            </div>
+
+            <div class="grid three">
+              <label class="field">
+                <span>Altura sujeto</span>
+                <input id="subjectHeight" type="number" min="1" step="1" />
+              </label>
+
+              <label class="field">
+                <span>Margen inferior</span>
+                <input id="bottomMargin" type="number" min="0" step="1" value="0" />
+              </label>
+
+              <label class="field checkbox-field">
+                <span>Ajuste seguro</span>
+                <label class="toggle-inline"><input id="safeWidth" type="checkbox" checked /> Evitar recorte lateral</label>
+              </label>
+            </div>
+
+            <div class="preset-actions">
+              <button type="button" class="ghost" data-save-preset="normal">Guardar como Foto Normal</button>
+              <button type="button" class="ghost" data-save-preset="cuadro">Guardar como Foto Cuadro</button>
+            </div>
+
+            <p class="helper">
+              El sujeto se recorta por transparencia, se escala usando su altura real, se centra y se pega al borde inferior del lienzo.
+            </p>
+          </div>
+
+          <div class="cta-row">
+            <button id="startButton" type="button" class="primary">Procesar lote</button>
+            <p id="statusLabel" class="status">Listo para trabajar.</p>
+          </div>
+        </section>
+
+        <section class="monitor">
+          <div class="section-head">
+            <p class="section-kicker">Seguimiento</p>
+            <h2>Log en vivo</h2>
+          </div>
+          <pre id="logOutput" class="log-output">Esperando proceso…</pre>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      const SETTINGS = {{ settings|tojson }};
+      let outputMode = "transparent";
+
+      const inputDir = document.getElementById("inputDir");
+      const outputDir = document.getElementById("outputDir");
+      const model = document.getElementById("model");
+      const limit = document.getElementById("limit");
+      const alphaMatting = document.getElementById("alphaMatting");
+      const autocrop = document.getElementById("autocrop");
+      const overwrite = document.getElementById("overwrite");
+      const canvasPanel = document.getElementById("canvasPanel");
+      const presetSelect = document.getElementById("presetSelect");
+      const canvasWidth = document.getElementById("canvasWidth");
+      const canvasHeight = document.getElementById("canvasHeight");
+      const subjectHeight = document.getElementById("subjectHeight");
+      const bottomMargin = document.getElementById("bottomMargin");
+      const safeWidth = document.getElementById("safeWidth");
+      const logOutput = document.getElementById("logOutput");
+      const statusLabel = document.getElementById("statusLabel");
+      const startButton = document.getElementById("startButton");
+
+      function applyPreset(name) {
+        if (name === "custom") return;
+        const preset = SETTINGS.presets[name];
+        canvasWidth.value = preset.canvas_width;
+        canvasHeight.value = preset.canvas_height;
+        subjectHeight.value = preset.subject_height;
+        bottomMargin.value = preset.bottom_margin;
+        safeWidth.checked = !!preset.safe_width;
+      }
+
+      function setMode(mode) {
+        outputMode = mode;
+        document.querySelectorAll(".mode-tab").forEach((button) => {
+          button.classList.toggle("active", button.dataset.mode === mode);
+        });
+        canvasPanel.classList.toggle("hidden", mode !== "canvas");
+      }
+
+      function appendLogs(lines) {
+        if (!lines.length) return;
+        logOutput.textContent = lines.join("\n");
+        logOutput.scrollTop = logOutput.scrollHeight;
+      }
+
+      async function pollStatus() {
+        const response = await fetch("/status");
+        const data = await response.json();
+        appendLogs(data.logs || []);
+        if (data.running) {
+          statusLabel.textContent = "Procesando…";
+          startButton.disabled = true;
+        } else if (data.error) {
+          statusLabel.textContent = "Error en el proceso.";
+          startButton.disabled = false;
+        } else if (data.done) {
+          statusLabel.textContent = "Proceso completado.";
+          startButton.disabled = false;
+        } else {
+          startButton.disabled = false;
+        }
+      }
+
+      async function savePreset(name) {
+        const response = await fetch("/save-preset", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            preset_name: name,
+            canvas_width: Number(canvasWidth.value),
+            canvas_height: Number(canvasHeight.value),
+            subject_height: Number(subjectHeight.value),
+            bottom_margin: Number(bottomMargin.value),
+            safe_width: safeWidth.checked,
+          }),
+        });
+        const data = await response.json();
+        if (!data.ok) {
+          alert(data.error || "No se pudo guardar el preset.");
+          return;
+        }
+        Object.assign(SETTINGS, data.settings);
+        alert(`Preset ${name} guardado.`);
+      }
+
+      async function startProcess() {
+        const payload = {
+          input_dir: inputDir.value.trim(),
+          output_dir: outputDir.value.trim(),
+          model: model.value,
+          limit: limit.value.trim() ? Number(limit.value) : null,
+          overwrite: overwrite.checked,
+          alpha_matting: alphaMatting.checked,
+          autocrop: autocrop.checked,
+          output_mode: outputMode,
+          canvas_width: Number(canvasWidth.value || 3600),
+          canvas_height: Number(canvasHeight.value || 4500),
+          subject_height: Number(subjectHeight.value || canvasHeight.value || 4500),
+          bottom_margin: Number(bottomMargin.value || 0),
+          safe_width: safeWidth.checked,
+        };
+
+        logOutput.textContent = "Iniciando proceso…";
+        statusLabel.textContent = "Enviando tarea…";
+        startButton.disabled = true;
+
+        const response = await fetch("/start", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+        if (!data.ok) {
+          statusLabel.textContent = data.error || "No se pudo iniciar el proceso.";
+          startButton.disabled = false;
+        }
+      }
+
+      document.querySelectorAll(".mode-tab").forEach((button) => {
+        button.addEventListener("click", () => setMode(button.dataset.mode));
+      });
+
+      document.querySelectorAll("[data-save-preset]").forEach((button) => {
+        button.addEventListener("click", () => savePreset(button.dataset.savePreset));
+      });
+
+      document.getElementById("startButton").addEventListener("click", startProcess);
+      document.getElementById("openOutput").addEventListener("click", async () => {
+        await fetch("/open-output", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ output_dir: outputDir.value.trim() }),
+        });
+      });
+
+      presetSelect.addEventListener("change", () => applyPreset(presetSelect.value));
+
+      document.querySelectorAll("[data-pick]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const message = button.dataset.pick === "input"
+            ? "Pega la ruta completa de la carpeta origen."
+            : "Pega la ruta completa de la carpeta destino.";
+          alert(message);
+        });
+      });
+
+      applyPreset("normal");
+      setMode("transparent");
+      setInterval(pollStatus, 1200);
+      pollStatus();
+    </script>
+  </body>
+</html>
