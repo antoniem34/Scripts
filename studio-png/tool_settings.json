@@ -1,0 +1,28 @@
+{
+  "models": [
+    "birefnet-portrait",
+    "u2net_human_seg",
+    "bria-rmbg",
+    "u2net"
+  ],
+  "presets": {
+    "normal": {
+      "label": "Foto Normal",
+      "canvas_width": 3600,
+      "canvas_height": 4500,
+      "subject_height": 4500,
+      "bottom_margin": 0,
+      "top_margin": 100,
+      "safe_width": true
+    },
+    "cuadro": {
+      "label": "Foto Cuadro",
+      "canvas_width": 3600,
+      "canvas_height": 4500,
+      "subject_height": 4500,
+      "bottom_margin": 0,
+      "top_margin": 75,
+      "safe_width": true
+    }
+  }
+}
